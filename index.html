@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>みちの3万年史マップ（試作）</title>
+<style>
+  body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #f4f2ec; color: #1c2420;
+    font-family: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif; }
+  form { width: min(340px, 86vw); }
+  h1 { margin: 0; font-size: 20px; line-height: 1.4; }
+  p { margin: 6px 0 18px; font-size: 14px; color: #5a625d; }
+  input[type=password] { width: 100%; box-sizing: border-box; padding: 12px; font-size: 16px; border: 1px solid #b9bdb7; border-radius: 6px; background: #fff; }
+  label { display: flex; align-items: center; gap: 6px; margin-top: 10px; font-size: 13px; color: #5a625d; }
+  button { margin-top: 16px; width: 100%; padding: 12px; font-size: 16px; font-weight: 700; color: #fff; background: #1c2420; border: 0; border-radius: 6px; }
+  #err { min-height: 1.5em; margin: 10px 0 0; color: #b3261e; font-size: 13px; }
+</style>
+</head>
+<body>
+<form id="f" hidden>
+  <h1>みちの3万年史マップ（試作）</h1>
+  <p>パスワードを入力してください。</p>
+  <input id="pw" type="password" autocomplete="current-password" aria-label="パスワード" autofocus>
+  <label><input id="keep" type="checkbox" checked>この端末で記憶する</label>
+  <button>開く</button>
+  <p id="err"></p>
+</form>
+<script>
+const BIN = "index.bin", ITER = 200000, STORE = "michi3man-pass";
+async function unlock(pw) {
+  const buf = new Uint8Array(await (await fetch(BIN, { cache: "no-cache" })).arrayBuffer());
+  const base = await crypto.subtle.importKey("raw", new TextEncoder().encode(pw), "PBKDF2", false, ["deriveKey"]);
+  const key = await crypto.subtle.deriveKey({ name: "PBKDF2", salt: buf.slice(0, 16), iterations: ITER, hash: "SHA-256" },
+    base, { name: "AES-GCM", length: 256 }, false, ["decrypt"]);
+  return new TextDecoder().decode(await crypto.subtle.decrypt({ name: "AES-GCM", iv: buf.slice(16, 28) }, key, buf.slice(28)));
+}
+function show(html) { document.open(); document.write(html); document.close(); }
+const f = document.getElementById("f"), err = document.getElementById("err");
+f.onsubmit = async (e) => {
+  e.preventDefault();
+  const pw = document.getElementById("pw").value;
+  err.textContent = "確認しています…";
+  try {
+    const html = await unlock(pw);
+    if (document.getElementById("keep").checked) localStorage.setItem(STORE, pw); else sessionStorage.setItem(STORE, pw);
+    show(html);
+  } catch (_) { err.textContent = "パスワードがちがいます。"; }
+};
+const saved = localStorage.getItem(STORE) || sessionStorage.getItem(STORE);
+if (saved) unlock(saved).then(show).catch(() => { localStorage.removeItem(STORE); sessionStorage.removeItem(STORE); f.hidden = false; });
+else f.hidden = false;
+</script>
+</body>
+</html>
